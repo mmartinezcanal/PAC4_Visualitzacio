@@ -1,0 +1,185 @@
+---
+title: "Visualització PAC4"
+author: "Marta Martínez"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    toc: yes
+    number_sections: yes
+    toc_depth: '4'
+    latex_engine: xelatex
+    fig_crop: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Neteja i manipulació de dades
+
+```{r}
+# Llibreries
+library (openxlsx)
+library(knitr) 
+library(dplyr)
+library(tidyr)
+library(data.table)
+library(stringr)
+library(kableExtra)
+library (ggplot2)
+```
+
+
+```{r}
+
+# Definim el directori de les dades
+dir<-getwd()
+setwd(dir)
+
+# Obrim i guardem el joc de dades 
+agreements <- read.xlsx('pax_all_agreements_data.xlsx')
+
+head(agreements) 
+tail(agreements) 
+```
+
+
+```{r}
+summary(agreements[, 1:25])
+```
+
+
+### Reducció dels atributs
+
+Variables informació bàsica:
+-	Con (Country/Entity): variable categòrica que ens indica el país o la regió de l’acord.
+-	Reg (Region): variable categòrica, que ens ajuda a classificar en regions els acords.
+-	AgtId (Agreement ID): es tracta d’una variable numèrica de caràcter identificatiu, discreta i que hauria de ser unívoca.
+-	Dat (Date Signed): la data és una variable contínua en el temps, quantitativa.
+
+Gender (8 camps)
+-	GeWom: Women, girls and gender 
+-	GeMe: Men and Boys 
+o	GeMeNu: Gender neutrality wording 
+o	GeMeOth: other 
+-	GeLgbti: LGBTI references 
+o	GeLgbtiPos: Positive LGBTI references 
+o	GeLgbtiNeg: Negative LGBTI references 
+-	GeFa: Family 
+
+Drets Humans, farem servir les següents:
+-	HrGen: Human Rights/ Rule of Law 
+-	EqGen: Equality 
+-	HrDem: Democracy 
+
+A més, agafarem 4 grups amb els següents subgrups de variables de Drets Humans:
+-	Prot: Protection measures
+-	HrCp: Civil and political rights
+-	HrFra: Human Rights Framework
+-	HrSec: Socio-economic rights
+
+```{r}
+
+# Escollim les columnes del dataframe
+mantenir <- c("Con","Reg", "AgtId", "Dat", "GeWom", "GeMe", "GeMeNu", "GeMeOth", "GeLgbti", "GeLgbtiPos", "GeLgbtiNeg", "GeFa", "HrGen", "EqGen", "HrDem", "Prot", "HrCp", "HrFra", "HrSec")
+data_pax <- agreements[ , (names(agreements) %in% mantenir)]
+
+str(data_pax)
+```
+
+### Noves columnes
+
+Afegim les noves columnes:
+- Tenen en compte el génere: Genere
+- Tenen en compte drets humans: DDHH
+- Intersecció dels dos ànbits: Gen_DDHH
+
+Es tracta de variables binàries:
+- 0: no es té en compte / no hi ha intersecció
+- 1: es té en compte /  hi ha intersecció
+
+```{r}
+# ifelse(test_expression, x, y)
+
+data_pax$Genere <- "NA"
+data_pax$DDHH <- "NA"
+data_pax$Gen_DDHH <- "NA"
+
+
+data_pax$Genere <- with(data_pax, ifelse(GeWom != 0 |
+                          GeMe != 0 |
+                          GeMeNu != 0 |
+                          GeMeOth != 0 |
+                          GeLgbti != 0 |
+                          GeLgbtiPos != 0 |
+                          GeLgbtiNeg != 0 |
+                          GeFa != 0,
+                          1, 0))
+
+data_pax$DDHH <- with(data_pax, ifelse(HrGen != 0 |
+                          EqGen != 0 |
+                          HrDem != 0 |
+                          Prot != 0 |
+                          HrFra != 0 |
+                          HrCp != 0 |
+                          HrSec != 0, 
+                          1, 0))
+
+
+data_pax$Gen_DDHH <- with(data_pax, ifelse(Genere == 1 &
+                          DDHH == 1, 
+                          1, 0))
+
+
+str(data_pax)
+
+
+```
+
+
+```{r}
+# Ens assegurem de que no hi hagi valors perduts a les nostres variables
+sapply(data_pax, function(x) sum(is.na(x)))
+```
+```{r}
+mantenir2 <- c("Con","Reg", "AgtId", "Dat", "Genere", "DDHH", "Gen_DDHH")
+data_pax_min <- data_pax[ , (names(data_pax) %in% mantenir2)]
+str(data_pax_min)
+
+```
+
+
+## Païssos
+
+Creem una llista de païssos en 
+
+```{r pressure, echo=FALSE}
+data <- data_pax[, c("Con", "AgtId")]
+
+new_data <- separate_rows(data, Con, AgtId, sep = "/",convert = FALSE)
+new_data$Con <- gsub("[()]","",as.character(new_data$Con))
+
+new_data <-rename(new_data,  Country = Con)
+
+new_data
+
+```
+
+
+## Fitxers
+
+```{r}
+# Generació dels arxius de sortida
+write.csv(data_pax, file = "data_pax.csv", row.names = TRUE)
+write.csv(data_pax_min, file = "data_pax_min.csv", row.names = TRUE)
+write.csv(new_data, file = "country_pax.csv", row.names = TRUE)
+```
+
+
+
+
